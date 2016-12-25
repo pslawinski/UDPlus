@@ -27,7 +27,8 @@ entity top is
 	Port ( 
 		zcd_i : in std_logic; -- ZCD Feedback
 		ocd_i : in std_logic; -- Overcurrent detect
-		int_i : in std_logic; -- Interrupter
+		int1_i : in std_logic; -- Interrupter 1
+		int2_i : in std_logic; -- Interrupter 2
 		dip_sw_i : in std_logic_vector (7 downto 0); -- Configuration DIP switch
 		ot_i : in std_logic; -- Overtemperature detect
 		uvlo_i : in std_logic; -- Undervoltage lockout
@@ -54,7 +55,8 @@ architecture Behavioral of top is
 	
 	-- Assign pin locations to signals
 	attribute loc of ot_i: signal is "P1";
-	attribute loc of int_i: signal is "P2";
+	attribute loc of int1_i: signal is "P2";
+	attribute loc of int2_i: signal is "P3";
 	attribute loc of uvlo_i: signal is "P5";
 	attribute loc of ocd_i: signal is "P6";
 	--attribute loc of zcd_i: signal is "P7"; -- XC9572XL
@@ -64,8 +66,8 @@ architecture Behavioral of top is
 	attribute loc of gdt2a_o: signal is "P28";
 	attribute loc of gdt1b_o: signal is "P29";
 	attribute loc of gdt1a_o: signal is "P30";
-	attribute loc of tp2_o: signal is "P32";
-	attribute loc of tp1_o: signal is "P33";
+	attribute loc of tp2_o: signal is "P33";
+	attribute loc of tp1_o: signal is "P34";
 	attribute loc of osc_i: signal is "P39";
 	attribute loc of osc_o: signal is "P40";
 	attribute loc of pw_o: signal is "P41";
@@ -156,7 +158,7 @@ architecture Behavioral of top is
 begin
 		
 	-- Get active high interrupter signal
-	int <= not int_i;
+	int <= (not int1_i) or int2_i;
 		
 	-- Assign number of start clocks
 	num_start_clocks <= ("0" & dip_sw_i(3 downto 0)) + 1;
@@ -234,10 +236,12 @@ begin
 	tp2_o <= ocd_tripped;
 	
 	-- Set UVLO fault (latching
-	process (uvlo_i)
+	process (int, uvlo_i)
 	begin
-		if falling_edge(uvlo_i) then
-			uvlo_fault <= '1';
+		if rising_edge(int) then
+			if uvlo_i = '0' then
+				uvlo_fault <= '1';
+			end if;
 		end if;
 	end process;
 
