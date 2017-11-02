@@ -102,6 +102,9 @@ architecture Behavioral of top is
 	-- Flag to indicate which side of the bridge to turn off when freewheeling
 	signal fw_target : std_logic := '0';
 
+	-- Start clocks from dip switch
+	signal start_clocks_cfg : std_logic_vector(3 downto 0);
+
 	-- Number of startup clocks specified by the user + 1 (so that there is always one cycle of startup)
 	signal num_start_clocks : std_logic_vector(4 downto 0) := (others => '0');
 	
@@ -155,24 +158,43 @@ architecture Behavioral of top is
 	
 	-- Selects feedback source (oscillator or ZCD in)
 	signal fb_sel : std_logic := '0';
+	
+	-- PWL Select mode (disabled by default);
+	signal pwl_test : std_logic;
 begin
+		
+	-- Startup clocks configured (via switch)
+	start_clocks_cfg <= dip_sw_i(3 downto 0);
 		
 	-- Get active high interrupter signal
 	int <= (not int1_i) or int2_i;
 		
 	-- Assign number of start clocks
-	num_start_clocks <= ("0" & dip_sw_i(3 downto 0)) + 1;
+	num_start_clocks <= ("0" & start_clocks_cfg) + 1;
 	
-	-- Tie PW limiter to internal interrupter
-	pw_o <= interrupter; 
+	-- Output PW limiter
+	process(int, interrupter, dip_sw_i)
+	begin
+		if start_clocks_cfg = "0000" then
+			pwl_test <= '1';
+			pw_o <= int;
+		else
+			pw_o <= interrupter; 
+			pwl_test <= '0';
+		end if;
+	end process;
+	
+	-- Output pw limiter signal
+	tp2_o <= not pw_i and int;
 	
 	-- Run oscillator
 	osc_o <= not osc_i; -- XC2C64A
 	--osc_o <= 'Z'; -- XC9572XL
 	
 	-- Indicates that the last start cycle has been reached
-	start_cycles_reached <= (start_osc_cnt >= dip_sw_i(3 downto 0));
+	start_cycles_reached <= (start_osc_cnt >= start_clocks_cfg);
 	
+	-- Set ZCD invert / not invert
 	process(zcd_i, zcd, dip_sw_i)
 	begin
 		-- Set phase
@@ -233,7 +255,6 @@ begin
 	
 	-- Output clock
 	tp1_o <= start_osc_div_16;
-	tp2_o <= ocd_tripped;
 	
 	-- Set UVLO fault (latching
 	process (int, uvlo_i)
@@ -313,7 +334,7 @@ begin
 				interrupter <= '0';
 			else
 				-- Clock in interrupter state
-				interrupter <= int and not fatal_fault;
+				interrupter <= int and not fatal_fault and not pwl_test;
 				
 				-- Reset if interrupter is off
 				if int = '0' or fatal_fault = '1' then
